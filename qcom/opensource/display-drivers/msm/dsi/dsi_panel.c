@@ -4614,6 +4614,11 @@ error:
 	return rc;
 }
 
+static u32 dsi_panel_get_backlight(struct dsi_panel *panel)
+{
+       return panel->bl_config.bl_level;
+}
+
 int dsi_panel_set_lp1(struct dsi_panel *panel)
 {
 	int rc = 0;
