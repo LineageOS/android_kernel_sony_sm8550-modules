@@ -74,3 +74,9 @@ ifeq ($(SOMC_CFG_CPSENSOR_ADUX1050),yes)
 include $(MY_LOCAL_PATH)/misc/adux1050/Android.mk
 
 endif
+
+ifeq ($(SOMC_CFG_FINGERPRINT_ET6XX),yes)
+
+include $(MY_LOCAL_PATH)/misc/et6xx/Android.mk
+
+endif
