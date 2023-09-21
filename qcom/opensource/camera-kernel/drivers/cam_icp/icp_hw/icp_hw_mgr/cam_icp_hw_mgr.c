@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/uaccess.h>
@@ -89,7 +89,7 @@ static int cam_icp_dump_io_cfg(struct cam_icp_hw_ctx_data *ctx_data,
 			used = 0;
 		}
 	}
-	cam_mem_put_cpu_buf(buf_handle);
+
 	return rc;
 }
 
@@ -2857,6 +2857,7 @@ static int cam_icp_mgr_trigger_recovery(struct cam_icp_hw_mgr *hw_mgr)
 		CAM_ERR(CAM_ICP,
 			"Fail to report system failure to userspace due to no active ctx");
 
+	complete(&hw_mgr->icp_complete);
 	CAM_DBG(CAM_ICP, "Done");
 	return rc;
 }
@@ -3857,7 +3858,7 @@ static int cam_icp_mgr_abort_handle_wq(
 	struct hfi_cmd_work_data   *task_data = NULL;
 	struct cam_icp_hw_ctx_data *ctx_data;
 	struct hfi_cmd_ipebps_async *abort_cmd;
-	struct hfi_cmd_abort        abort_data = {0};
+	struct hfi_cmd_abort        abort_data;
 
 	if (!data || !priv) {
 		CAM_ERR(CAM_ICP, "Invalid params %pK %pK", data, priv);
@@ -4240,6 +4241,7 @@ static int cam_icp_mgr_hw_close(void *hw_priv, void *hw_close_args)
 	int rc = 0;
 
 	CAM_DBG(CAM_ICP, "E");
+	atomic_set(&hw_mgr->recovery, 0);
 	if (!hw_mgr->icp_booted) {
 		CAM_DBG(CAM_ICP, "hw mgr is already closed");
 		return 0;
@@ -4431,7 +4433,7 @@ static int cam_icp_mgr_send_fw_init(struct cam_icp_hw_mgr *hw_mgr)
 			&icp_hw_mgr.icp_complete,
 			msecs_to_jiffies(timeout), CAM_ICP,
 			"FW response timeout for FW init handle command");
-	if (!rem_jiffies) {
+	if (!rem_jiffies || atomic_read(&hw_mgr->recovery)) {
 		rc = -ETIMEDOUT;
 		cam_icp_dump_debug_info(false);
 	}
@@ -4457,6 +4459,18 @@ static int cam_icp_mgr_hw_open_u(void *hw_mgr_priv, void *download_fw_args)
 
 	mutex_lock(&hw_mgr->hw_mgr_mutex);
 	rc = cam_icp_mgr_hw_open(hw_mgr, download_fw_args);
+	if (rc) {
+		CAM_WARN(CAM_ICP, "Retry ICP initialization");
+		rc = cam_icp_mgr_hw_close(hw_mgr, NULL);
+		if (rc) {
+			CAM_ERR(CAM_ICP, "cam_icp_mgr_hw_close() rc:%d", rc);
+		} else {
+			rc = cam_icp_mgr_hw_open(hw_mgr, download_fw_args);
+			if (rc) {
+				CAM_ERR(CAM_ICP, "cam_icp_mgr_hw_open() rc:%d", rc);
+			}
+		}
+	}
 	mutex_unlock(&hw_mgr->hw_mgr_mutex);
 
 	return rc;
@@ -5028,7 +5042,6 @@ static int cam_icp_mgr_process_cmd_desc(struct cam_icp_hw_mgr *hw_mgr,
 
 			*fw_cmd_buf_iova_addr =
 				(*fw_cmd_buf_iova_addr + cmd_desc[i].offset);
-
 			rc = cam_mem_get_cpu_buf(cmd_desc[i].mem_handle,
 				&cpu_addr, &len);
 			if (rc || !cpu_addr) {
@@ -5045,12 +5058,9 @@ static int cam_icp_mgr_process_cmd_desc(struct cam_icp_hw_mgr *hw_mgr,
 				((len - cmd_desc[i].offset) <
 				cmd_desc[i].length)) {
 				CAM_ERR(CAM_ICP, "Invalid offset or length");
-				cam_mem_put_cpu_buf(cmd_desc[i].mem_handle);
 				return -EINVAL;
 			}
 			cpu_addr = cpu_addr + cmd_desc[i].offset;
-
-			cam_mem_put_cpu_buf(cmd_desc[i].mem_handle);
 		}
 	}
 
@@ -6016,7 +6026,6 @@ hw_dump:
 		req_ts.tv_nsec/NSEC_PER_USEC,
 		cur_ts.tv_sec,
 		cur_ts.tv_nsec/NSEC_PER_USEC);
-
 	rc  = cam_mem_get_cpu_buf(dump_args->buf_handle,
 		&icp_dump_args.cpu_addr, &icp_dump_args.buf_len);
 	if (rc) {
@@ -6027,7 +6036,6 @@ hw_dump:
 	if (icp_dump_args.buf_len <= dump_args->offset) {
 		CAM_WARN(CAM_ICP, "dump buffer overshoot len %zu offset %zu",
 			icp_dump_args.buf_len, dump_args->offset);
-		cam_mem_put_cpu_buf(dump_args->buf_handle);
 		return -ENOSPC;
 	}
 
@@ -6038,7 +6046,6 @@ hw_dump:
 	if (remain_len < min_len) {
 		CAM_WARN(CAM_ICP, "dump buffer exhaust remain %zu min %u",
 			remain_len, min_len);
-		cam_mem_put_cpu_buf(dump_args->buf_handle);
 		return -ENOSPC;
 	}
 
@@ -6103,13 +6110,6 @@ hw_dump:
 	/* Dumping the fw image*/
 	icp_dump_args.offset = dump_args->offset;
 	icp_dev_intf = hw_mgr->icp_dev_intf;
-
-	if (!icp_dev_intf) {
-		CAM_ERR(CAM_ICP, "ICP device interface is NULL");
-		cam_mem_put_cpu_buf(dump_args->buf_handle);
-		return -EINVAL;
-	}
-
 	rc = icp_dev_intf->hw_ops.process_cmd(
 		icp_dev_intf->hw_priv,
 		CAM_ICP_CMD_HW_DUMP, &icp_dump_args,
@@ -6117,8 +6117,6 @@ hw_dump:
 	CAM_DBG(CAM_ICP, "Offset before %zu after %zu",
 		dump_args->offset, icp_dump_args.offset);
 	dump_args->offset = icp_dump_args.offset;
-
-	cam_mem_put_cpu_buf(dump_args->buf_handle);
 	return rc;
 }
 
@@ -7001,8 +6999,6 @@ static void cam_icp_mgr_dump_pf_data(struct cam_icp_hw_mgr *hw_mgr,
 
 	cam_packet_util_dump_patch_info(packet, hw_mgr->iommu_hdl,
 		hw_mgr->iommu_sec_hdl, pf_args);
-
-	cam_packet_util_put_packet_addr(pf_cmd_args->pf_req_info->packet_handle);
 }
 
 static int cam_icp_mgr_cmd(void *hw_mgr_priv, void *cmd_args)
@@ -7110,9 +7106,7 @@ int cam_icp_hw_mgr_init(struct device_node *of_node, uint64_t *hw_mgr_hdl,
 		(camera_hw_version == CAM_CPAS_TITAN_680_V110) ||
 		(camera_hw_version == CAM_CPAS_TITAN_780_V100) ||
 		(camera_hw_version == CAM_CPAS_TITAN_640_V200) ||
-		(camera_hw_version == CAM_CPAS_TITAN_640_V210) ||
-		(camera_hw_version == CAM_CPAS_TITAN_880_V100) ||
-		(camera_hw_version == CAM_CPAS_TITAN_770_V100)) {
+		(camera_hw_version == CAM_CPAS_TITAN_880_V100)) {
 		if (cam_caps & CPAS_TITAN_IPE0_CAP_BIT)
 			icp_hw_mgr.ipe0_enable = true;
 		if (cam_caps & CPAS_BPS_BIT)

@@ -1,9 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
-
 #ifndef _CAM_REQ_MGR_CORE_H_
 #define _CAM_REQ_MGR_CORE_H_
 
@@ -16,7 +15,13 @@
 #define CAM_REQ_MGR_MAX_LINKED_DEV     16
 #define MAX_REQ_SLOTS                  48
 
+/* sony extension begin */
+#if 1
+#define CAM_REQ_MGR_WATCHDOG_TIMEOUT          30000
+#else
 #define CAM_REQ_MGR_WATCHDOG_TIMEOUT          1000
+#endif
+/* sony extension end */
 #define CAM_REQ_MGR_WATCHDOG_TIMEOUT_DEFAULT  5000
 #define CAM_REQ_MGR_WATCHDOG_TIMEOUT_MAX      50000
 #define CAM_REQ_MGR_SCHED_REQ_TIMEOUT         1000
@@ -38,7 +43,13 @@
 
 #define SYNC_LINK_SOF_CNT_MAX_LMT 1
 
+/* sony extension begin */
+#if 1
+#define MAXIMUM_LINKS_PER_SESSION  8
+#else
 #define MAXIMUM_LINKS_PER_SESSION  4
+#endif
+/* sony extension end */
 
 #define MAXIMUM_RETRY_ATTEMPTS 3
 
@@ -219,13 +230,11 @@ struct cam_req_mgr_apply {
  * @apply_at_eof    : Boolean Identifier for request to be applied at EOF
  * @is_applied      : Flag to identify if request is already applied to device
  *                    in previous frame
- * @skip_isp_apply  : Flag to indicate skip apply req for ISP
  */
 struct crm_tbl_slot_special_ops {
 	int32_t dev_hdl;
 	bool apply_at_eof;
 	bool is_applied;
-	bool skip_isp_apply;
 };
 
 /**
@@ -342,14 +351,13 @@ struct cam_req_mgr_req_data {
 /**
  * struct cam_req_mgr_connected_device
  * - Device Properties
- * @dev_hdl   : device handle
- * @dev_bit   : unique bit assigned to device in link
+ * @dev_hdl  : device handle
+ * @dev_bit  : unique bit assigned to device in link
  * - Device characteristics
- * @pd_tbl    : tracks latest available req id at this device
- * @dev_info  : holds dev characteristics such as pipeline delay, dev name
- * @ops       : holds func pointer to call methods on this device
- * @parent    : pvt data - like link which this dev hdl belongs to
- * @is_active : indicate whether device is active in auto shdr usecase
+ * @pd_tbl   : tracks latest available req id at this device
+ * @dev_info : holds dev characteristics such as pipeline delay, dev name
+ * @ops      : holds func pointer to call methods on this device
+ * @parent   : pvt data - like link which this dev hdl belongs to
  */
 struct cam_req_mgr_connected_device {
 	int32_t                         dev_hdl;
@@ -358,7 +366,6 @@ struct cam_req_mgr_connected_device {
 	struct cam_req_mgr_device_info  dev_info;
 	struct cam_req_mgr_kmd_ops     *ops;
 	void                           *parent;
-	bool                            is_active;
 };
 
 /**
@@ -368,8 +375,6 @@ struct cam_req_mgr_connected_device {
  * @num_devs             : num of connected devices to this link
  * @max_delay            : Max of pipeline delay of all connected devs
  * @min_delay            : Min of pipeline delay of all connected devs
- * @max_mswitch_delay    : Max of modeswitch delay of all connected devs
- * @min_mswitch_delay    : Min of modeswitch delay of all connected devs
  * @workq                : Pointer to handle workq related jobs
  * @pd_mask              : each set bit indicates the device with pd equal to
  *                          bit position is available.
@@ -419,16 +424,12 @@ struct cam_req_mgr_connected_device {
  * @try_for_internal_recovery : If the link stalls try for RT internal recovery
  * @properties_mask      : Indicates if current link enables some special properties
  * @cont_empty_slots     : Continuous empty slots
- * @is_shdr              : flag to indicate auto shdr usecase without SFE
- * @wait_for_dual_trigger: Flag to indicate whether to wait for second epoch in dual trigger
  */
 struct cam_req_mgr_core_link {
 	int32_t                              link_hdl;
 	int32_t                              num_devs;
 	enum cam_pipeline_delay              max_delay;
 	enum cam_pipeline_delay              min_delay;
-	enum cam_modeswitch_delay            max_mswitch_delay;
-	enum cam_modeswitch_delay            min_mswitch_delay;
 	struct cam_req_mgr_core_workq       *workq;
 	int32_t                              pd_mask;
 	struct cam_req_mgr_connected_device *l_dev;
@@ -464,8 +465,6 @@ struct cam_req_mgr_core_link {
 	bool                                 try_for_internal_recovery;
 	uint32_t                             properties_mask;
 	uint32_t                             cont_empty_slots;
-	bool                                 is_shdr;
-	bool                                 wait_for_dual_trigger;
 };
 
 /**

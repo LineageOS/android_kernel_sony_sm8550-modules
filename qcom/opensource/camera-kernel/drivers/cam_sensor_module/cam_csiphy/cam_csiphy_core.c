@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -494,11 +494,6 @@ static int cam_csiphy_update_secure_info(struct csiphy_device *csiphy_dev, int32
 	}
 
 	switch (cpas_version) {
-	case CAM_CPAS_TITAN_640_V200:
-	case CAM_CPAS_TITAN_770_V100:
-		bit_offset_bet_phys_in_cp_ctrl =
-			CAM_CSIPHY_MAX_DPHY_LANES + CAM_CSIPHY_MAX_CPHY_LANES + 1;
-		break;
 	case CAM_CPAS_TITAN_580_V100:
 	case CAM_CPAS_TITAN_680_V100:
 	case CAM_CPAS_TITAN_780_V100:
@@ -814,12 +809,10 @@ static int __cam_csiphy_parse_lane_info_cmd_buf(
 		csiphy_dev->csiphy_info[index].settle_time,
 		csiphy_dev->csiphy_info[index].data_rate);
 
-	cam_mem_put_cpu_buf(cmd_desc->mem_handle);
 	return rc;
 
 reset_settings:
 	cam_csiphy_reset_phyconfig_param(csiphy_dev, index);
-	cam_mem_put_cpu_buf(cmd_desc->mem_handle);
 	return rc;
 }
 
@@ -1009,7 +1002,6 @@ int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 			break;
 	}
 
-	cam_mem_put_cpu_buf(cfg_dev->packet_handle);
 	return rc;
 }
 
@@ -1500,9 +1492,8 @@ void cam_csiphy_shutdown(struct csiphy_device *csiphy_dev)
 
 		cam_csiphy_reset(csiphy_dev);
 		cam_soc_util_disable_platform_resource(soc_info, true, true);
-		if (g_phy_data[soc_info->index].aon_cam_id == NOT_AON_CAM)
-			cam_cpas_stop(csiphy_dev->cpas_handle);
 
+		cam_cpas_stop(csiphy_dev->cpas_handle);
 		csiphy_dev->csiphy_state = CAM_CSIPHY_ACQUIRE;
 	}
 
@@ -1530,6 +1521,12 @@ static int32_t cam_csiphy_external_cmd(struct csiphy_device *csiphy_dev,
 	struct cam_csiphy_info cam_cmd_csiphy_info;
 	int32_t rc = 0;
 	int32_t  index = -1;
+/* sony extension begin */
+	uint32_t lane_enable = 0;
+	uint16_t lane_assign = 0;
+	uint8_t lane_cnt = 0;
+	uint16_t preamble_en = 0;
+/* sony extension end */
 
 	if (copy_from_user(&cam_cmd_csiphy_info,
 		u64_to_user_ptr(p_submit_cmd->packet_handle),
@@ -1545,6 +1542,34 @@ static int32_t cam_csiphy_external_cmd(struct csiphy_device *csiphy_dev,
 			return -EINVAL;
 		}
 
+/* sony extension begin */
+		rc = cam_csiphy_sanitize_lane_cnt(csiphy_dev, index,
+			cam_cmd_csiphy_info.lane_cnt);
+		if (rc) {
+			CAM_ERR(CAM_CSIPHY, "Wrong configuration lane_cnt: %u",
+				cam_cmd_csiphy_info.lane_cnt);
+			return rc;
+		}
+
+		preamble_en = (cam_cmd_csiphy_info.mipi_flags &
+			PREAMBLE_PATTEN_CAL_MASK);
+
+		/* Cannot support CPHY combo mode with One sensor setting
+		* preamble enable and second/third sensor is without
+		* preamble enable.
+		*/
+		if (csiphy_dev->preamble_enable && !preamble_en &&
+			csiphy_dev->combo_mode &&
+			!csiphy_dev->cphy_dphy_combo_mode) {
+			CAM_ERR(CAM_CSIPHY,
+				"Cannot support %s combo mode with differnt preamble settings",
+				(csiphy_dev->csiphy_info[index].csiphy_3phase ?
+				"CPHY" : "DPHY"));
+			return -EINVAL;
+		}
+
+		csiphy_dev->preamble_enable = preamble_en;
+/* sony extension end */
 		csiphy_dev->csiphy_info[index].lane_cnt =
 			cam_cmd_csiphy_info.lane_cnt;
 		csiphy_dev->csiphy_info[index].lane_assign =
@@ -1558,9 +1583,71 @@ static int32_t cam_csiphy_external_cmd(struct csiphy_device *csiphy_dev,
 			__func__,
 			csiphy_dev->csiphy_info[index].settle_time,
 			csiphy_dev->csiphy_info[index].lane_cnt);
+/* sony extension begin */
+		csiphy_dev->csiphy_info[index].secure_mode =
+			cam_cmd_csiphy_info.secure_mode;
+		csiphy_dev->csiphy_info[index].mipi_flags =
+			(cam_cmd_csiphy_info.mipi_flags & SKEW_CAL_MASK);
+
+		lane_assign = csiphy_dev->csiphy_info[index].lane_assign;
+		lane_cnt = csiphy_dev->csiphy_info[index].lane_cnt;
+
+		while (lane_cnt--) {
+			rc = cam_csiphy_get_lane_enable(csiphy_dev, index,
+				(lane_assign & 0xF), &lane_enable);
+			if (rc) {
+				CAM_ERR(CAM_CSIPHY, "Wrong lane configuration: %d",
+					csiphy_dev->csiphy_info[index].lane_assign);
+				if ((csiphy_dev->combo_mode) ||
+					(csiphy_dev->cphy_dphy_combo_mode)) {
+					CAM_DBG(CAM_CSIPHY,
+						"Resetting error to zero for other devices to configure");
+					rc = 0;
+				}
+				lane_enable = 0;
+				csiphy_dev->csiphy_info[index].lane_enable = lane_enable;
+				goto reset_settings;
+			}
+			csiphy_dev->csiphy_info[index].lane_enable |= lane_enable;
+			lane_assign >>= 4;
+		}
+
+		if (cam_cmd_csiphy_info.secure_mode == 1) {
+			rc = cam_csiphy_update_secure_info(csiphy_dev, index);
+			if (rc) {
+				CAM_ERR(CAM_CSIPHY,
+					"Secure info configuration failed for index: %d", index);
+				goto reset_settings;
+			}
+		}
+
+		CAM_DBG(CAM_CSIPHY,
+			"phy version:%d, phy_idx: %d, preamble_en: %u",
+			csiphy_dev->hw_version,
+			csiphy_dev->soc_info.index,
+			csiphy_dev->preamble_enable);
+		CAM_DBG(CAM_CSIPHY,
+			"3phase:%d, combo mode:%d, secure mode:%d",
+			csiphy_dev->csiphy_info[index].csiphy_3phase,
+			csiphy_dev->combo_mode,
+			cam_cmd_csiphy_info.secure_mode);
+		CAM_DBG(CAM_CSIPHY,
+			"lane_cnt: 0x%x, lane_assign: 0x%x, lane_enable: 0x%x, settle time:%llu, datarate:%llu",
+			csiphy_dev->csiphy_info[index].lane_cnt,
+			csiphy_dev->csiphy_info[index].lane_assign,
+			csiphy_dev->csiphy_info[index].lane_enable,
+			csiphy_dev->csiphy_info[index].settle_time,
+			csiphy_dev->csiphy_info[index].data_rate);
+/* sony extension end */
 	}
 
 	return rc;
+
+/* sony extension begin */
+reset_settings:
+	cam_csiphy_reset_phyconfig_param(csiphy_dev, index);
+	return rc;
+/* sony extension end */
 }
 
 static int cam_csiphy_update_lane_selection(struct csiphy_device *csiphy, int index, bool enable)
@@ -1617,12 +1704,10 @@ static int __csiphy_cpas_configure_for_main_or_aon(
 		return 0;
 	}
 
-	if (get_access) {
-		rc = cam_csiphy_cpas_ops(cpas_handle, true);
-		if (rc) {
-			CAM_ERR(CAM_CSIPHY, "voting CPAS: %d failed", rc);
-			return rc;
-		}
+	rc = cam_csiphy_cpas_ops(cpas_handle, true);
+	if (rc) {
+		CAM_ERR(CAM_CSIPHY, "voting CPAS: %d failed", rc);
+		return rc;
 	}
 
 	cam_cpas_reg_read(cpas_handle, CAM_CPAS_REG_CPASTOP,
@@ -1650,13 +1735,7 @@ static int __csiphy_cpas_configure_for_main_or_aon(
 	if (rc)
 		CAM_ERR(CAM_CSIPHY, "CPAS AON sel register write failed");
 
-	if (!get_access) {
-		rc = cam_csiphy_cpas_ops(cpas_handle, false);
-		if (rc) {
-			CAM_ERR(CAM_CSIPHY, "voting CPAS: %d failed", rc);
-			return rc;
-		}
-	}
+	cam_csiphy_cpas_ops(cpas_handle, false);
 
 	return rc;
 }
@@ -2291,11 +2370,9 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 		if (rc < 0)
 			CAM_ERR(CAM_CSIPHY, "Failed in csiphy release");
 
-		if (!g_phy_data[soc_info->index].is_configured_for_main) {
-			if (cam_csiphy_cpas_ops(csiphy_dev->cpas_handle, false)) {
-				CAM_ERR(CAM_CSIPHY, "Failed in de-voting CPAS");
-				rc = -EFAULT;
-			}
+		if (cam_csiphy_cpas_ops(csiphy_dev->cpas_handle, false)) {
+			CAM_ERR(CAM_CSIPHY, "Failed in de-voting CPAS");
+			rc = -EFAULT;
 		}
 
 		csiphy_dev->csiphy_state = CAM_CSIPHY_ACQUIRE;
@@ -2534,12 +2611,10 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 			goto release_mutex;
 		}
 
-		if (!g_phy_data[soc_info->index].is_configured_for_main) {
-			if (cam_csiphy_cpas_ops(csiphy_dev->cpas_handle, true)) {
-				rc = -EFAULT;
-				CAM_ERR(CAM_CSIPHY, "voting CPAS: %d", rc);
-				goto release_mutex;
-			}
+		rc = cam_csiphy_cpas_ops(csiphy_dev->cpas_handle, true);
+		if (rc) {
+			CAM_ERR(CAM_CSIPHY, "voting CPAS: %d", rc);
+			goto release_mutex;
 		}
 
 		if (csiphy_dev->csiphy_info[offset].secure_mode == 1) {

@@ -13,7 +13,7 @@ LOCAL_PATH := $(call my-dir)
 # Path to DLKM make scripts
 DLKM_DIR := $(TOP)/device/qcom/common/dlkm
 # List of board platforms for which MMRM driver API should be enabled
-MMRM_BOARDS := taro parrot kalama crow
+MMRM_BOARDS := taro parrot kalama
 
 # Kbuild options
 KBUILD_OPTIONS := CAMERA_KERNEL_ROOT=$(shell pwd)/$(LOCAL_PATH)
@@ -52,6 +52,25 @@ include $(DLKM_DIR)/AndroidKernelModule.mk
 # Include Camera UAPI Android.mk target to copy headers
 include $(LOCAL_PATH)/include/uapi/Android.mk
 else
+include $(DLKM_DIR)/Build_external_kernelmodule.mk
+endif
+
+ifeq ($(TARGET_BOARD_PLATFORM), kalama)
+include $(CLEAR_VARS)
+# For incremental compilation
+LOCAL_SRC_FILES             :=  \
+                                $(shell find $(LOCAL_PATH)/config -L -type f)      \
+                                $(shell find $(LOCAL_PATH)/drivers -L -type f)     \
+                                $(shell find $(LOCAL_PATH)/dt-bindings -L -type f) \
+                                $(shell find $(LOCAL_PATH)/include -L -type f)     \
+                                $(LOCAL_PATH)/Android.mk \
+                                $(LOCAL_PATH)/board.mk   \
+                                $(LOCAL_PATH)/product.mk \
+                                $(LOCAL_PATH)/Kbuild
+LOCAL_MODULE              := camera-module-symvers
+LOCAL_MODULE_STEM         := Module.symvers
+LOCAL_MODULE_KBUILD_NAME  := Module.symvers
+LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/Build_external_kernelmodule.mk
 endif
 
