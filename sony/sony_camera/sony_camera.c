@@ -3331,7 +3331,7 @@ static struct i2c_driver sony_camera_qup_i2c_subdev_driver =
 	.id_table = sony_camera_qup_i2c_subdev_id,
 	.remove = sony_camera_qup_i2c_subdev_remove,
 };
-static i2c_qup_driver_added = false;
+static bool i2c_qup_driver_added = false;
 
 static int sony_camera_qup_spi_subdev_probe(struct spi_device *spi)
 {
@@ -3415,7 +3415,7 @@ static struct spi_driver sony_camera_qup_spi_subdev_driver =
 	.probe = sony_camera_qup_spi_subdev_probe,
 	.remove = sony_camera_qup_spi_subdev_remove,
 };
-static spi_qup_driver_added = false;
+static bool spi_qup_driver_added = false;
 
 static struct platform_driver sony_camera_platform_driver[] =
 {
