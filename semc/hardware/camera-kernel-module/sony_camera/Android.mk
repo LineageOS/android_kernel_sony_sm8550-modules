@@ -1,7 +1,7 @@
 # Kbuild options
 KBUILD_OPTIONS := SONY_CAMERA_KERNEL_ROOT=$(shell pwd)/$(LOCAL_PATH)
 KBUILD_OPTIONS += KERNEL_ROOT=$(shell pwd)/kernel/msm-$(TARGET_KERNEL_VERSION)/
-KBUILD_OPTIONS += CAMERA_KERNEL_ROOT=$(ROOT_DIR)/../vendor/qcom/opensource/camera-kernel
+KBUILD_OPTIONS += CAMERA_KERNEL_ROOT=$(ROOT_DIR)/../sm8550-modules/qcom/opensource/camera-kernel
 KBUILD_OPTIONS += MODNAME=sony_camera
 
 KBUILD_OPTIONS += BOARD_PLATFORM=$(TARGET_BOARD_PLATFORM)
