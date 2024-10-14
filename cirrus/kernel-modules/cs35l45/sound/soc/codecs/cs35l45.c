@@ -1726,7 +1726,7 @@ out:
 	return ret;
 }
 
-int cs35l45_snd_soc_put_volsw_sx(struct snd_kcontrol *kcontrol,
+static int cs35l45_snd_soc_put_volsw_sx(struct snd_kcontrol *kcontrol,
 			 struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *component =
