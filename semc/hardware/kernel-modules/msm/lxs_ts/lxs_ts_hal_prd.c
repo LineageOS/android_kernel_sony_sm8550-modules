@@ -1115,7 +1115,7 @@ static int prd_print_data_pre(struct lxs_prd_data *prd, char *prt_buf,
 }
 
 /*
-* Base - Row : Tx, Col : Rx, Rx first
+ * Base - Row : Tx, Col : Rx, Rx first
  *
  *      : [ 0] [ 1] [ 2] ... [cc]
  * Rx[rr] xxxx xxxx xxxx ... xxxx //col_size
