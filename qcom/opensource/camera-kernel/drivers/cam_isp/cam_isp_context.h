@@ -325,6 +325,12 @@ struct cam_isp_context {
 
 	void                            *hw_ctx;
 	uint64_t                         sof_timestamp_val;
+/* sony extension begin */
+#if 1
+	bool                             hw_config_applied;
+	bool                             reg_update_pending;
+#endif
+/* sony extension end */
 	uint64_t                         boot_timestamp;
 	int32_t                          active_req_cnt;
 	int64_t                          reported_req_id;
