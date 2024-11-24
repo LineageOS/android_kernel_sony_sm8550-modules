@@ -3504,6 +3504,7 @@ static struct platform_driver sony_camera_platform_driver[] =
 			.of_match_table = sony_camera_2_dt_match,
 		},
 	},
+#ifndef CONFIG_DUAL_CAMERA
 	{
 		.driver = {
 			.name = "sony_camera_3",
@@ -3519,6 +3520,7 @@ static struct platform_driver sony_camera_platform_driver[] =
 			.of_match_table = sony_camera_4_dt_match,
 		},
 	},
+#endif
 #endif
 };
 

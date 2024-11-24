@@ -15,5 +15,6 @@ ccflags-y += -I$(CAMERA_KERNEL_ROOT)/drivers/cam_sensor_module/cam_sensor_utils
 ccflags-y += -I$(CAMERA_KERNEL_ROOT)/drivers/cam_smmu
 ccflags-y += -I$(CAMERA_KERNEL_ROOT)/drivers/cam_req_mgr
 ccflags-y += -DCONFIG_SPECTRA_CAMERA=y
+ccflags-$(CONFIG_MACH_SONY_PDX237) += -DCONFIG_DUAL_CAMERA=y
 
 obj-m += sony_camera.o
