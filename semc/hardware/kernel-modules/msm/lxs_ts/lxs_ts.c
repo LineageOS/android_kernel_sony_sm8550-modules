@@ -1332,6 +1332,23 @@ int drm_notifier_callback(struct notifier_block *self, unsigned long event, void
 			default:
 				break;
 			}
+		} else if (event == DRM_EXT_EVENT_AOD_CHANGE) {
+			int enabled = *(int *)evdata->data;
+			struct lxs_ts_chip *chip = &ts->chip;
+			t_dev_info(ts->dev, "AOD change: %d\n", enabled);
+			if (enabled) {
+				mutex_lock(&ts->lock);
+				chip->enable_lpm = 1;
+				t_dev_info(ts->dev, "set_lowpower_mode: %d\n", chip->enable_lpm);
+				mutex_unlock(&ts->lock);
+				lxs_hal_enable_device(ts, 0);
+			} else {
+				mutex_lock(&ts->lock);
+				chip->enable_lpm = 0;
+				t_dev_info(ts->dev, "set_lowpower_mode: %d\n", chip->enable_lpm);
+				mutex_unlock(&ts->lock);
+				lxs_hal_enable_device(ts, 1);
+			}
 		}
 	}
 
