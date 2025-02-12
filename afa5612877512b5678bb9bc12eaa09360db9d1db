@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "b6db4db8_cb1f7d64",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 31578
+      },
+      "writtenOn": "2025-02-12T09:12:36Z",
+      "side": 1,
+      "message": "Test: DT2W on AOD mode",
+      "revId": "afa5612877512b5678bb9bc12eaa09360db9d1db",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
