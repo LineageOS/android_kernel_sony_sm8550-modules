@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "c8b6a497_dfd5ccd2",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 34167
+      },
+      "writtenOn": "2025-02-12T13:44:30Z",
+      "side": 1,
+      "message": "Confirm that DT2W finally works on AOD which was not working before these patchsets.",
+      "revId": "5f78a1341e54047f1d633701f1d966994919cc3d",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
