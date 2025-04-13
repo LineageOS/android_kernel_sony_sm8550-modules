@@ -12,7 +12,6 @@
 #include <linux/msi.h>
 #include <linux/of.h>
 #include <linux/of_gpio.h>
-#include <linux/pm_runtime.h>
 #include <linux/suspend.h>
 #include <linux/version.h>
 #include <linux/sched.h>
@@ -2528,12 +2527,22 @@ cnss_get_plat_priv_by_driver_ops(struct cnss_wlan_driver *driver_ops)
 static int cnss_pci_store_qrtr_node_id(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
-	u32 scratch = QCA6390_PCIE_SOC_PCIE_REG_PCIE_SCRATCH_2_SOC_PCIE_REG;
+	u32 scratch = PCIE_SCRATCH_2_SOC_PCIE_REG;
 	struct cnss_plat_data *plat_priv;
 
 	if (!pci_priv) {
 		cnss_pr_err("pci_priv is NULL\n");
 		return -ENODEV;
+	}
+
+	switch (pci_priv->device_id) {
+	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
+		break;
+	default:
+		cnss_pr_dbg("device 0x%x not supported qrtr set, nothing to do\n",
+			    pci_priv->device_id);
+		return ret;
 	}
 
 	plat_priv = pci_priv->plat_priv;
@@ -2551,8 +2560,7 @@ static int cnss_pci_store_qrtr_node_id(struct cnss_pci_data *pci_priv)
 	 * exchange. According to qrtr spec, every node should
 	 * have unique qrtr node id
 	 */
-	if (plat_priv->device_id == QCA6390_DEVICE_ID &&
-	    plat_priv->qrtr_node_id) {
+	if (plat_priv->qrtr_node_id) {
 		u32 val;
 
 		cnss_pr_dbg("write 0x%x to SCRATCH REG\n",
@@ -2596,9 +2604,7 @@ static int cnss_pci_store_qrtr_node_id(struct cnss_pci_data *pci_priv)
 /**
  * All the user share the same vector and msi data
  * For MHI user, we need pass IRQ array information to MHI component
- * MHI_IRQ_NUMBER is defined to specify this MHI IRQ array size
  */
-#define MHI_IRQ_NUMBER 3
 static struct cnss_msi_config msi_config_one_msi = {
 	.total_vectors = 1,
 	.total_users = 4,
@@ -2648,12 +2654,6 @@ static bool cnss_pci_is_one_msi(struct cnss_pci_data *pci_priv)
 	       (pci_priv->msi_config->total_vectors == 1);
 }
 
-static int cnss_pci_get_one_msi_mhi_irq_array_size(
-		struct cnss_pci_data *pci_priv)
-{
-	return MHI_IRQ_NUMBER;
-}
-
 static bool cnss_pci_is_force_one_msi(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -2675,12 +2675,6 @@ static bool cnss_pci_fallback_one_msi(struct cnss_pci_data *pci_priv,
 static bool cnss_pci_is_one_msi(struct cnss_pci_data *pci_priv)
 {
 	return false;
-}
-
-static int cnss_pci_get_one_msi_mhi_irq_array_size(
-		struct cnss_pci_data *pci_priv)
-{
-	return 0;
 }
 
 static bool cnss_pci_is_force_one_msi(struct cnss_pci_data *pci_priv)
@@ -2761,7 +2755,8 @@ retry:
 	return ret;
 }
 
-static void cnss_pci_power_off_mhi(struct cnss_pci_data *pci_priv)
+static void
+cnss_pci_power_off_mhi(struct cnss_pci_data *pci_priv, bool mhi_force_power_off)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
@@ -2776,7 +2771,7 @@ static void cnss_pci_power_off_mhi(struct cnss_pci_data *pci_priv)
 	cnss_pci_set_mhi_state_bit(pci_priv, CNSS_MHI_RESUME);
 	cnss_pci_set_mhi_state_bit(pci_priv, CNSS_MHI_POWERING_OFF);
 
-	if (!pci_priv->pci_link_down_ind)
+	if (!pci_priv->pci_link_down_ind && !mhi_force_power_off)
 		cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_POWER_OFF);
 	else
 		cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_FORCE_POWER_OFF);
@@ -3485,12 +3480,13 @@ static int cnss_qca6290_powerup(struct cnss_pci_data *pci_priv)
 	int ret = 0;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	unsigned int timeout;
+	bool mhi_force_power_off = false;
 	int retry = 0, bt_en_gpio = plat_priv->pinctrl_info.bt_en_gpio;
 	int sw_ctrl_gpio = plat_priv->pinctrl_info.sw_ctrl_gpio;
 
 	if (plat_priv->ramdump_info_v2.dump_data_valid) {
 		cnss_pci_clear_dump_info(pci_priv);
-		cnss_pci_power_off_mhi(pci_priv);
+		cnss_pci_power_off_mhi(pci_priv, false);
 		cnss_suspend_pci_link(pci_priv);
 		cnss_pci_deinit_mhi(pci_priv);
 		cnss_power_off_device(plat_priv);
@@ -3549,11 +3545,17 @@ retry:
 		cnss_fatal_err("Failed to start MHI, err = %d\n", ret);
 		if (!test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state) &&
 		    !pci_priv->pci_link_down_ind && timeout) {
-			/* Start recovery directly for MHI start failures */
-			cnss_schedule_recovery(&pci_priv->pci_dev->dev,
-					       CNSS_REASON_DEFAULT);
+			if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)) {
+				CNSS_ASSERT(0);
+				mhi_force_power_off = true;
+			} else {
+				/* Start recovery directly for MHI start failures */
+				cnss_schedule_recovery(&pci_priv->pci_dev->dev,
+						       CNSS_REASON_DEFAULT);
+				return 0;
+			}
 		}
-		return 0;
+		goto stop_mhi;
 	}
 
 	if (test_bit(USE_CORE_ONLY_FW, &plat_priv->ctrl_params.quirks)) {
@@ -3581,7 +3583,7 @@ retry:
 
 stop_mhi:
 	cnss_pci_set_wlaon_pwr_ctrl(pci_priv, false, true, true);
-	cnss_pci_power_off_mhi(pci_priv);
+	cnss_pci_power_off_mhi(pci_priv, mhi_force_power_off);
 	cnss_suspend_pci_link(pci_priv);
 	cnss_pci_deinit_mhi(pci_priv);
 power_off:
@@ -3635,7 +3637,7 @@ static int cnss_qca6290_shutdown(struct cnss_pci_data *pci_priv)
 	if (plat_priv->ramdump_info_v2.dump_data_valid)
 		goto skip_power_off;
 
-	cnss_pci_power_off_mhi(pci_priv);
+	cnss_pci_power_off_mhi(pci_priv, false);
 	ret = cnss_suspend_pci_link(pci_priv);
 	if (ret)
 		cnss_pr_err("Failed to suspend PCI link, err = %d\n", ret);
@@ -3687,7 +3689,7 @@ static int cnss_qca6290_ramdump(struct cnss_pci_data *pci_priv)
 	ret = cnss_do_elf_ramdump(plat_priv);
 
 	cnss_pci_clear_dump_info(pci_priv);
-	cnss_pci_power_off_mhi(pci_priv);
+	cnss_pci_power_off_mhi(pci_priv, false);
 	cnss_suspend_pci_link(pci_priv);
 	cnss_pci_deinit_mhi(pci_priv);
 	cnss_power_off_device(plat_priv);
@@ -7017,7 +7019,6 @@ static int cnss_pci_get_mhi_msi(struct cnss_pci_data *pci_priv)
 	u32 user_base_data, base_vector;
 	int *irq;
 	unsigned int msi_data;
-	bool is_one_msi = false;
 
 	ret = cnss_get_user_msi_assignment(&pci_priv->pci_dev->dev,
 					   MHI_MSI_NAME, &num_vectors,
@@ -7025,10 +7026,6 @@ static int cnss_pci_get_mhi_msi(struct cnss_pci_data *pci_priv)
 	if (ret)
 		return ret;
 
-	if (cnss_pci_is_one_msi(pci_priv)) {
-		is_one_msi = true;
-		num_vectors = cnss_pci_get_one_msi_mhi_irq_array_size(pci_priv);
-	}
 	cnss_pr_dbg("Number of assigned MSI for MHI is %d, base vector is %d\n",
 		    num_vectors, base_vector);
 
@@ -7037,9 +7034,7 @@ static int cnss_pci_get_mhi_msi(struct cnss_pci_data *pci_priv)
 		return -ENOMEM;
 
 	for (i = 0; i < num_vectors; i++) {
-		msi_data = base_vector;
-		if (!is_one_msi)
-			msi_data += i;
+		msi_data = base_vector + i;
 		irq[i] = cnss_get_msi_irq(&pci_priv->pci_dev->dev, msi_data);
 	}
 
@@ -7204,6 +7199,42 @@ static bool cnss_is_tme_supported(struct cnss_pci_data *pci_priv)
 	}
 }
 
+#ifdef CONFIG_ONE_MSI_VECTOR
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0))
+static void cnss_pci_set_mhi_event_config_for_one_msi(void)
+{
+	uint32_t i;
+	uint32_t num_events = ARRAY_SIZE(cnss_mhi_events);
+
+	/* In one MSI mode, all rings share the same vector 0, so the msivec field
+	 * in mhi_event_ctxt should be set to 0, and msivec actually references
+	 * the value of the irq field in the cnss_mhi_events array, so set the irq
+	 * field in array cnss_mhi_events to 0.
+	 */
+	for (i = 0; i < num_events; i++)
+		cnss_mhi_events[i].irq = 0;
+}
+#else
+static void cnss_pci_set_mhi_event_config_for_one_msi(void)
+{
+	/* The irq field value of cnss_mhi_events array should be set to 0, but when
+	 * the kernel version is older than 5.12, cnss_mhi_events is defined as const
+	 * type and irq field cannot be overwritten with the correct value. since the
+	 * kernel older than 5.12 is becoming outdated, this issue on the old kernel
+	 * will not be fixed for now.
+	 */
+	cnss_pr_err("Known issue: The irq field value of cnss_mhi_events should "
+		    "be an incorrect value in one msi mode, this may result in "
+		    "the host not being able to get interrupt. All rings should "
+		    "share the same vector 0 in one msi mode.");
+}
+#endif
+#else
+static void cnss_pci_set_mhi_event_config_for_one_msi(void)
+{
+}
+#endif
+
 static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -7248,8 +7279,10 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 		goto free_mhi_ctrl;
 	}
 
-	if (cnss_pci_is_one_msi(pci_priv))
+	if (cnss_pci_is_one_msi(pci_priv)) {
 		mhi_ctrl->irq_flags = IRQF_SHARED | IRQF_NOBALANCING;
+		cnss_pci_set_mhi_event_config_for_one_msi();
+	}
 
 	if (pci_priv->smmu_s1_enable) {
 		mhi_ctrl->iova_start = pci_priv->smmu_iova_start;
@@ -7372,7 +7405,51 @@ static void cnss_pci_config_regs(struct cnss_pci_data *pci_priv)
 	}
 }
 
-#if !IS_ENABLED(CONFIG_ARCH_QCOM)
+#if IS_ENABLED(CONFIG_ARCH_QCOM)
+/**
+ * cnss_pci_of_reserved_mem_device_init() - Assign reserved memory region
+ *                                          to given PCI device
+ * @pci_priv: driver PCI bus context pointer
+ *
+ * This function shall call corresponding of_reserved_mem_device* API to
+ * assign reserved memory region to PCI device based on where the memory is
+ * defined and attached to (platform device of_node or PCI device of_node)
+ * in device tree.
+ *
+ * Return: 0 for success, negative value for error
+ */
+static int cnss_pci_of_reserved_mem_device_init(struct cnss_pci_data *pci_priv)
+{
+	struct device *dev_pci = &pci_priv->pci_dev->dev;
+	int ret;
+
+	/* Use of_reserved_mem_device_init_by_idx() if reserved memory is
+	 * attached to platform device of_node.
+	 */
+	ret = of_reserved_mem_device_init(dev_pci);
+	if (ret) {
+		if (ret == -EINVAL)
+			cnss_pr_vdbg("Ignore, no specific reserved-memory assigned\n");
+		else
+			cnss_pr_err("Failed to init reserved mem device, err = %d\n",
+				    ret);
+	}
+	if (dev_pci->cma_area)
+		cnss_pr_dbg("CMA area is %s\n",
+			    cma_get_name(dev_pci->cma_area));
+
+	return ret;
+}
+
+static int cnss_pci_wake_gpio_init(struct cnss_pci_data *pci_priv)
+{
+	return 0;
+}
+
+static void cnss_pci_wake_gpio_deinit(struct cnss_pci_data *pci_priv)
+{
+}
+#else
 static int cnss_pci_of_reserved_mem_device_init(struct cnss_pci_data *pci_priv)
 {
 	return 0;
@@ -8041,7 +8118,7 @@ int cnss_pci_init(struct cnss_plat_data *plat_priv)
 				    ret);
 			goto out;
 		}
-		if (!plat_priv->bus_priv) {
+		if (cnss_pci_is_sync_probe() && !plat_priv->bus_priv) {
 			cnss_pr_err("Failed to probe PCI driver\n");
 			ret = -ENODEV;
 			goto unreg_pci;

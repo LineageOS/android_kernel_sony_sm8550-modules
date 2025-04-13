@@ -2077,6 +2077,8 @@ int ipa3_teardown_sys_pipe(u32 clnt_hdl)
 
 		if ( ! IPA_CLIENT_IS_MAPPED(IPA_CLIENT_APPS_WAN_CONS, i) ) {
 			IPAERR("Failed to get idx for IPA_CLIENT_APPS_WAN_CONS");
+			if (!ep->keep_ipa_awake)
+				IPA_ACTIVE_CLIENTS_DEC_EP(ipa3_get_client_mapping(clnt_hdl));
 			return i;
 		}
 
@@ -2087,6 +2089,10 @@ int ipa3_teardown_sys_pipe(u32 clnt_hdl)
 			result = ipa3_teardown_pipe(i);
 			if (result) {
 				IPAERR("failed to teardown default coal pipe\n");
+				if (!ep->keep_ipa_awake) {
+					IPA_ACTIVE_CLIENTS_DEC_EP(
+						ipa3_get_client_mapping(clnt_hdl));
+				}
 				return result;
 			}
 		}
@@ -2099,6 +2105,8 @@ int ipa3_teardown_sys_pipe(u32 clnt_hdl)
 
 		if ( ! IPA_CLIENT_IS_MAPPED(IPA_CLIENT_APPS_LAN_CONS, i) ) {
 			IPAERR("Failed to get idx for IPA_CLIENT_APPS_LAN_CONS,");
+			if (!ep->keep_ipa_awake)
+				IPA_ACTIVE_CLIENTS_DEC_EP(ipa3_get_client_mapping(clnt_hdl));
 			return i;
 		}
 
@@ -2109,6 +2117,10 @@ int ipa3_teardown_sys_pipe(u32 clnt_hdl)
 			result = ipa3_teardown_pipe(i);
 			if (result) {
 				IPAERR("failed to teardown default coal pipe\n");
+				if (!ep->keep_ipa_awake) {
+					IPA_ACTIVE_CLIENTS_DEC_EP(
+						ipa3_get_client_mapping(clnt_hdl));
+				}
 				return result;
 			}
 		}
@@ -2137,8 +2149,10 @@ int ipa3_teardown_sys_pipe(u32 clnt_hdl)
 			ep->gsi_mem_info.chan_ring_len;
 	} else if (ep->gsi_evt_ring_hdl != ~0) {
 		result = gsi_reset_evt_ring(ep->gsi_evt_ring_hdl);
-		if (WARN(result != GSI_STATUS_SUCCESS, "reset evt %d", result))
+		if (WARN(result != GSI_STATUS_SUCCESS, "reset evt %d", result)) {
+			ipa_assert();
 			return result;
+		}
 
 		dma_free_coherent(ipa3_ctx->pdev,
 			ep->gsi_mem_info.evt_ring_len,
@@ -2155,8 +2169,10 @@ int ipa3_teardown_sys_pipe(u32 clnt_hdl)
 		}
 
 		result = gsi_dealloc_evt_ring(ep->gsi_evt_ring_hdl);
-		if (WARN(result != GSI_STATUS_SUCCESS, "deall evt %d", result))
+		if (WARN(result != GSI_STATUS_SUCCESS, "deall evt %d", result)) {
+			ipa_assert();
 			return result;
+		}
 	}
 	if (ep->sys->repl_wq)
 		flush_workqueue(ep->sys->repl_wq);

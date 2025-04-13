@@ -41,10 +41,13 @@ static struct icnss_battery_level icnss_battery_level[] = {
 };
 
 static struct icnss_vreg_cfg icnss_wcn6450_vreg_list[] = {
-	{"vdd-cx-mx", 824000, 952000, 0, 0, 0, false, true},
-	{"vdd-1.8-xo", 1872000, 1872000, 0, 0, 0, false, true},
-	{"vdd-1.3-rfa", 1256000, 1352000, 0, 0, 0, false, true},
-	{"vdd-aon", 1256000, 1352000, 0, 0, 0, false, true},
+	{"vdd-aon", 920000, 1040000, 0, 0, 0, false, true},
+	{"vdd-1.8-rfa", 1856000, 1908000, 0, 0, 0, false, true},
+	{"vdd-1.2-rfa", 1256000, 1408000, 0, 0, 0, false, true},
+	{"vdd-cx", 620000, 2200000, 0, 0, 0, false, true},
+	{"vdd-1.8-io", 1800000, 1800000, 0, 0, 0, false, true},
+	{"vdd-3p3-2g", 3300000, 3300000, 0, 0, 0, false, true},
+	{"vdd-3p3-5g", 3300000, 3300000, 0, 0, 0, false, true},
 };
 
 static struct icnss_clk_cfg icnss_clk_list[] = {

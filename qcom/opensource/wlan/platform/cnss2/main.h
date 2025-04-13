@@ -46,6 +46,10 @@
 #include "qmi.h"
 #include "cnss_prealloc.h"
 #include "cnss_common.h"
+#include <linux/pm_runtime.h>
+#if IS_ENABLED(CONFIG_PCIE_QCOM_ECAM)
+#include <linux/pm_domain.h>
+#endif
 
 #define MAX_NO_OF_MAC_ADDR		4
 #define QMI_WLFW_MAX_TIMESTAMP_LEN	32
@@ -551,6 +555,7 @@ struct cnss_plat_data {
 	struct workqueue_struct *event_wq;
 	struct work_struct recovery_work;
 	struct delayed_work wlan_reg_driver_work;
+	struct work_struct cnss_dms_del_work;
 	struct qmi_handle qmi_wlfw;
 	struct qmi_handle qmi_dms;
 	struct wlfw_rf_chip_info chip_info;
@@ -657,6 +662,9 @@ struct cnss_plat_data {
 	struct wlchip_serial_id_v01 serial_id;
 	bool ipa_shared_cb_enable;
 	u32 pcie_switch_type;
+	bool is_fw_managed_pwr;
+	struct device **pd_devs;
+	int pd_count;
 };
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
@@ -770,4 +778,10 @@ int cnss_iommu_map(struct iommu_domain *domain, unsigned long iova,
 		   phys_addr_t paddr, size_t size, int prot);
 int cnss_select_pinctrl_enable(struct cnss_plat_data *plat_priv);
 int cnss_select_pinctrl_state(struct cnss_plat_data *plat_priv, bool state);
+int cnss_fw_managed_power_regulator(struct cnss_plat_data *plat_priv,
+				    bool enabled);
+int cnss_fw_managed_power_gpio(struct cnss_plat_data *plat_priv,
+			       bool enabled);
+int cnss_fw_managed_domain_attach(struct cnss_plat_data *plat_priv);
+void cnss_fw_managed_domain_detach(struct cnss_plat_data *plat_priv);
 #endif /* _CNSS_MAIN_H */
