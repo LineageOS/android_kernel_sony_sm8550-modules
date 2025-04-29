@@ -9,7 +9,7 @@ _default_module_enablement_list = [
     "wlan_firmware_service",
 ]
 
-_cnss2_enabled_target = ["neo-la", "anorak", "niobe", "pineapple", "sun"]
+_cnss2_enabled_target = ["seraph", "neo-la", "anorak", "niobe", "pineapple", "sun", "sdxkova"]
 _icnss2_enabled_target = ["blair", "pineapple", "monaco", "pitti", "volcano"]
 
 def _get_module_list(target, variant):
@@ -42,10 +42,26 @@ def _define_platform_config_rule(module, target, variant):
         cmd = "cat $(SRCS) > $@",
     )
     native.genrule(
+        name = "{}/{}_defconfig_generate_perf-defconfig".format(module, tv),
+        outs = ["{}/{}_defconfig.generated_perf-defconfig".format(module, tv)],
+        srcs = [
+            "{}/{}_gki_defconfig".format(module, target),
+        ],
+        cmd = "cat $(SRCS) > $@",
+    )
+    native.genrule(
         name = "{}/{}_defconfig_generate_gki".format(module, tv),
         outs = ["{}/{}_defconfig.generated_gki".format(module, tv)],
         srcs = [
             "{}/{}_gki_defconfig".format(module, target),
+        ],
+        cmd = "cat $(SRCS) > $@",
+    )
+    native.genrule(
+        name = "{}/{}_defconfig_generate_debug-defconfig".format(module, tv),
+        outs = ["{}/{}_defconfig.generated_debug-defconfig".format(module, tv)],
+        srcs = [
+            "{}/{}_consolidate_defconfig".format(module, target),
         ],
         cmd = "cat $(SRCS) > $@",
     )
@@ -85,7 +101,7 @@ def _define_modules_for_target_variant(target, variant):
             "//msm-kernel:all_headers",
             ":wlan-platform-headers",
         ]
-        if target != "anorak" and target != "neo-la":
+        if target != "anorak" and target != "neo-la" and target != "seraph" and target != "sdxkova":
             deps.append("//vendor/qcom/opensource/securemsm-kernel:{}_smcinvoke_dlkm".format(tv))
 
         ddk_module(
@@ -196,6 +212,17 @@ def _define_modules_for_target_variant(target, variant):
     )
 
     module = "cnss_utils"
+    cnss_utils_dep_list = [
+        "//msm-kernel:all_headers",
+        ":wlan-platform-headers",
+    ]
+    if target == "sun":
+        cnss_utils_dep_list = cnss_utils_dep_list + ["//vendor/qcom/opensource/data-kernel/drivers/smem-mailbox:{}_smem_mailbox".format(tv),]
+    #if target == "sdxkova":
+    #    tgt = "target-aarch64_cortex-a53_musl"
+    #    board = "sdx85"
+    #    pkg_ver = "1.0"
+    #    cnss_utils_dep_list = cnss_utils_dep_list + ["//build_dir/{}/linux-{}/smem-mailbox-{}:{}_smem_mailbox".format(tgt, board, pkg_ver, tv),]
     _define_platform_config_rule(module, target, variant)
     defconfig = ":{}/{}_defconfig_generate_{}".format(module, tv, variant)
     ddk_module(
@@ -208,10 +235,7 @@ def _define_modules_for_target_variant(target, variant):
         defconfig = defconfig,
         out = "cnss_utils.ko",
         kernel_build = "//msm-kernel:{}".format(tv),
-        deps = [
-            "//msm-kernel:all_headers",
-            ":wlan-platform-headers",
-        ],
+        deps = cnss_utils_dep_list,
     )
 
     module = "cnss_utils"
@@ -262,4 +286,5 @@ def _define_modules_for_target_variant(target, variant):
 def define_modules():
     for (t, v) in get_all_variants():
         print("v=", v)
-        _define_modules_for_target_variant(t, v)
+        if t in _cnss2_enabled_target or t in _icnss2_enabled_target:
+            _define_modules_for_target_variant(t, v)

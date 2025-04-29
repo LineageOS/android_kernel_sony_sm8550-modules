@@ -1464,8 +1464,7 @@ static int icnss_driver_event_fw_ready_ind(struct icnss_priv *priv, void *data)
 	clear_bit(ICNSS_MODE_ON, &priv->state);
 	atomic_set(&priv->soc_wake_ref_count, 0);
 
-	if (priv->device_id == WCN6750_DEVICE_ID ||
-	    priv->device_id == WCN6450_DEVICE_ID)
+	if (priv->device_id == WCN6750_DEVICE_ID)
 		icnss_free_qdss_mem(priv);
 
 	icnss_pr_info("WLAN FW is ready: 0x%lx\n", priv->state);
@@ -1523,6 +1522,29 @@ static int icnss_driver_event_fw_init_done(struct icnss_priv *priv, void *data)
 	return ret;
 }
 
+void icnss_free_qdss_mem(struct icnss_priv *priv)
+{
+	struct platform_device *pdev = priv->pdev;
+	struct icnss_fw_mem *qdss_mem = priv->qdss_mem;
+	int i;
+
+	for (i = 0; i < priv->qdss_mem_seg_len; i++) {
+		if (qdss_mem[i].va && qdss_mem[i].size) {
+			icnss_pr_dbg("Freeing memory for QDSS: pa: %pa, size: 0x%zx, type: %u\n",
+				     &qdss_mem[i].pa, qdss_mem[i].size,
+				     qdss_mem[i].type);
+			dma_free_coherent(&pdev->dev,
+					  qdss_mem[i].size, qdss_mem[i].va,
+					  qdss_mem[i].pa);
+			qdss_mem[i].va = NULL;
+			qdss_mem[i].pa = 0;
+			qdss_mem[i].size = 0;
+			qdss_mem[i].type = 0;
+		}
+	}
+	priv->qdss_mem_seg_len = 0;
+}
+
 static int icnss_alloc_qdss_mem(struct icnss_priv *priv)
 {
 	struct platform_device *pdev = priv->pdev;
@@ -1555,29 +1577,6 @@ static int icnss_alloc_qdss_mem(struct icnss_priv *priv)
 	}
 
 	return 0;
-}
-
-void icnss_free_qdss_mem(struct icnss_priv *priv)
-{
-	struct platform_device *pdev = priv->pdev;
-	struct icnss_fw_mem *qdss_mem = priv->qdss_mem;
-	int i;
-
-	for (i = 0; i < priv->qdss_mem_seg_len; i++) {
-		if (qdss_mem[i].va && qdss_mem[i].size) {
-			icnss_pr_dbg("Freeing memory for QDSS: pa: %pa, size: 0x%zx, type: %u\n",
-				     &qdss_mem[i].pa, qdss_mem[i].size,
-				     qdss_mem[i].type);
-			dma_free_coherent(&pdev->dev,
-					  qdss_mem[i].size, qdss_mem[i].va,
-					  qdss_mem[i].pa);
-			qdss_mem[i].va = NULL;
-			qdss_mem[i].pa = 0;
-			qdss_mem[i].size = 0;
-			qdss_mem[i].type = 0;
-		}
-	}
-	priv->qdss_mem_seg_len = 0;
 }
 
 static int icnss_qdss_trace_req_mem_hdlr(struct icnss_priv *priv)

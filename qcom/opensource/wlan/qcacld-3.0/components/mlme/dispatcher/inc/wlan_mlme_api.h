@@ -2447,6 +2447,18 @@ bool mlme_get_bss_11be_allowed(struct wlan_objmgr_psoc *psoc,
 			       struct qdf_mac_addr *bssid,
 			       uint8_t *ie_data,
 			       uint32_t ie_length);
+
+/**
+ * wlan_mlme_get_oem_eht_mlo_config() - Get the OEM EHT configuration.
+ * @psoc: PSOC object manager.
+ * @oem_eht_cfg: Pointer to fill OEM cfg
+ *
+ * Returns success of retrieving OEM cfg else failure.
+ *
+ * Return: QDF_STATUS.
+ */
+QDF_STATUS wlan_mlme_get_oem_eht_mlo_config(struct wlan_objmgr_psoc *psoc,
+					    uint32_t *oem_eht_cfg);
 #else
 static inline
 bool mlme_get_bss_11be_allowed(struct wlan_objmgr_psoc *psoc,
@@ -2455,6 +2467,14 @@ bool mlme_get_bss_11be_allowed(struct wlan_objmgr_psoc *psoc,
 			       uint32_t ie_length)
 {
 	return false;
+}
+
+static inline QDF_STATUS
+wlan_mlme_get_oem_eht_mlo_config(struct wlan_objmgr_psoc *psoc,
+				 uint32_t *oem_eht_cfg)
+{
+	*oem_eht_cfg = 0x0;
+	return QDF_STATUS_SUCCESS;
 }
 #endif
 
@@ -4355,5 +4375,46 @@ QDF_STATUS wlan_mlme_get_sta_ch_width(struct wlan_objmgr_vdev *vdev,
  */
 QDF_STATUS
 wlan_mlme_send_csa_event_status_ind(struct wlan_objmgr_vdev *vdev,
-				    uint8_t csa_status);
+				     uint8_t csa_status);
+
+/**
+ * wlan_mlme_set_keepalive_period() - Save keep alive period
+ * @vdev: VDEV object
+ * @keep_alive_period: Keep alive period
+ *
+ * Return: None
+ */
+void wlan_mlme_set_keepalive_period(struct wlan_objmgr_vdev *vdev,
+				    uint16_t keep_alive_period);
+
+/**
+ * wlan_mlme_get_keepalive_period() - Get keep alive period
+ * @vdev: VDEV object
+ *
+ * Return: Keep alive period.
+ */
+uint16_t wlan_mlme_get_keepalive_period(struct wlan_objmgr_vdev *vdev);
+
+/**
+ * wlan_mlme_reset_sta_keepalive_period() - Reset keep alive period to default
+ * cfg whether it is set by userspace or via assoc rsp
+ * @psoc: pointer to psoc object
+ * @vdev: VDEV object
+ *
+ * Return: None
+ */
+void wlan_mlme_reset_sta_keepalive_period(struct wlan_objmgr_psoc *psoc,
+					  struct wlan_objmgr_vdev *vdev);
+
+/**
+ * wlan_mlme_get_sta_keep_alive_period() - get keep alive period
+ * @psoc: pointer to psoc object
+ * @keep_alive_period: keep alive period
+ *
+ * Return: QDF STATUS
+ */
+QDF_STATUS
+wlan_mlme_get_sta_keep_alive_period(struct wlan_objmgr_psoc *psoc,
+				    uint32_t *keep_alive_period);
+
 #endif /* _WLAN_MLME_API_H_ */

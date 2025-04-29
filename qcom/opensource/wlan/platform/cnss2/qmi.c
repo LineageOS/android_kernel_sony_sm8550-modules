@@ -3655,7 +3655,8 @@ static int dms_new_server(struct qmi_handle *qmi_dms,
 static void cnss_dms_server_exit_work(struct work_struct *work)
 {
 	int ret;
-	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(NULL);
+	struct cnss_plat_data *plat_priv =
+		container_of(work, struct cnss_plat_data, cnss_dms_del_work);
 
 	cnss_dms_deinit(plat_priv);
 
@@ -3666,8 +3667,6 @@ static void cnss_dms_server_exit_work(struct work_struct *work)
 	if (ret < 0)
 		cnss_pr_err("QMI DMS service registraton failed, ret\n", ret);
 }
-
-static DECLARE_WORK(cnss_dms_del_work, cnss_dms_server_exit_work);
 
 static void dms_del_server(struct qmi_handle *qmi_dms,
 			   struct qmi_service *service)
@@ -3688,12 +3687,12 @@ static void dms_del_server(struct qmi_handle *qmi_dms,
 	clear_bit(CNSS_QMI_DMS_CONNECTED, &plat_priv->driver_state);
 	cnss_pr_info("QMI DMS service disconnected, state: 0x%lx\n",
 		     plat_priv->driver_state);
-	schedule_work(&cnss_dms_del_work);
+	schedule_work(&plat_priv->cnss_dms_del_work);
 }
 
-void cnss_cancel_dms_work(void)
+void cnss_cancel_dms_work(struct cnss_plat_data *plat_priv)
 {
-	cancel_work_sync(&cnss_dms_del_work);
+	cancel_work_sync(&plat_priv->cnss_dms_del_work);
 }
 
 static struct qmi_ops qmi_dms_ops = {
@@ -3711,6 +3710,8 @@ int cnss_dms_init(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("Failed to initialize DMS handle, err: %d\n", ret);
 		goto out;
 	}
+
+	INIT_WORK(&plat_priv->cnss_dms_del_work, cnss_dms_server_exit_work);
 
 	ret = qmi_add_lookup(&plat_priv->qmi_dms, DMS_SERVICE_ID_V01,
 			     DMS_SERVICE_VERS_V01, 0);

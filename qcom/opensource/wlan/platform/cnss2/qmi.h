@@ -96,7 +96,7 @@ int cnss_wlfw_cal_report_req_send_sync(struct cnss_plat_data *plat_priv,
 int cnss_send_subsys_restart_level_msg(struct cnss_plat_data *plat_priv);
 int cnss_wlfw_send_host_wfc_call_status(struct cnss_plat_data *plat_priv,
 					struct cnss_wfc_cfg cfg);
-void cnss_cancel_dms_work(void);
+void cnss_cancel_dms_work(struct cnss_plat_data *plat_priv);
 #else
 #define QMI_WLFW_TIMEOUT_MS		10000
 
@@ -330,7 +330,7 @@ int cnss_send_subsys_restart_level_msg(struct cnss_plat_data *plat_priv)
 	return 0;
 }
 
-static void cnss_cancel_dms_work(void)
+static void cnss_cancel_dms_work(struct cnss_plat_data *plat_priv)
 {
 }
 
