@@ -16,6 +16,23 @@
       "message": "verified with lineage-22.1",
       "revId": "d6da8de2fa3d88fe3077039656477fa1411fc00e",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "8ea0b285_05bba891",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 14962
+      },
+      "writtenOn": "2025-04-29T01:31:50Z",
+      "side": 1,
+      "message": "I have confirmed that this revert fixes issue #8489",
+      "revId": "d6da8de2fa3d88fe3077039656477fa1411fc00e",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }
