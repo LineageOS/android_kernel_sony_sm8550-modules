@@ -1272,6 +1272,7 @@ int drm_notifier_callback(struct notifier_block *self, unsigned long event, void
 {
 	struct drm_ext_event *evdata = (struct drm_ext_event *)data;
 	struct lxs_ts *ts = container_of(self, struct lxs_ts, drm_notif);
+	struct lxs_ts_chip *chip = &ts->chip;
 	struct timespec64 time;
 	int blank;
 
@@ -1298,6 +1299,11 @@ int drm_notifier_callback(struct notifier_block *self, unsigned long event, void
 					time.tv_sec, time.tv_nsec);
 				break;
 			case DRM_BLANK_UNBLANK:
+				t_dev_info(ts->dev, "Out of AOD mode first");
+				mutex_lock(&ts->lock);
+				chip->enable_lpm = false;
+				mutex_unlock(&ts->lock);
+				lxs_hal_enable_device(ts, true);
 				break;
 			default:
 				break;
@@ -1334,7 +1340,6 @@ int drm_notifier_callback(struct notifier_block *self, unsigned long event, void
 			}
 		} else if (event == DRM_EXT_EVENT_AOD_CHANGE) {
 			int enabled = *(int *)evdata->data;
-			struct lxs_ts_chip *chip = &ts->chip;
 			t_dev_info(ts->dev, "AOD change: %d\n", enabled);
 			mutex_lock(&ts->lock);
 			chip->enable_lpm = enabled;
